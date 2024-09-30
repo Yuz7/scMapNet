@@ -161,6 +161,6 @@ def evaluate(data_loader, model, device, args):
         
     if args.test and misc.is_main_process():
         new = ad.concat(adata_list)
-        new.write_h5ad('test.h5ad')
+        new.write_h5ad(os.path.join(args.output_dir,'embed.h5ad'))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
