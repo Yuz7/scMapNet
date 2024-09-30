@@ -21,6 +21,7 @@ To fine tune scMapNet on your own data, follow these steps:
 2. Generate treemap images with single-cell data (download baron dataset [here](https://drive.google.com/file/d/1YrG3xP_NeAlKKM7RzC38m2x9gtlffh6Y/view?usp=drive_link))
 
 ```
+
 # -e expression file
 # -m prior marker information
 # -o output directory
@@ -33,6 +34,7 @@ To fine tune scMapNet on your own data, follow these steps:
 
 cd scMapNet
 nohup ./generate_image_script.sh -e ../scdataset/sce_baron.rds -m treemap/marker_location.csv -o ../data/ -f treemap/ensemble_ID_transfer_new.csv -d 0 -t seurat -s all -n 48 > log/generate_image.log 2>&1 &
+
 ``` 
 
 1. Start fine-tuning (download pretrain weights [here](https://drive.google.com/file/d/1ZlguObYTDVE-H9AqX48lfMSnvP0iTUg5/view?usp=drive_link);use pancreas as example). A fine-tuned checkpoint will be saved during training. Evaluation will be run after training.
