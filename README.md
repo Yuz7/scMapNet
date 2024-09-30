@@ -6,16 +6,32 @@
 
 Official repo for [scMapNet: marker-based cell type annotation of single-cell RNA-seq data using vision transfer learning with Tabular-to-Image ], which is based on [Treemap](https://cran.r-project.org/web/packages/treemap/treemap.pdf) and [MAE](https://github.com/facebookresearch/mae)
 
-# 🔧Install
+# 🔧Install environment
 
-[![scipy-1.5.4](https://img.shields.io/badge/scipy-1.5.4-yellowgreen)](https://github.com/scipy/scipy) [![torch-1.8.1](https://img.shields.io/badge/torch-1.8.1-orange)](https://github.com/pytorch/pytorch) [![numpy-1.19.2](https://img.shields.io/badge/numpy-1.19.2-red)](https://github.com/numpy/numpy) [![pandas-1.1.5](https://img.shields.io/badge/pandas-1.1.5-lightgrey)](https://github.com/pandas-dev/pandas) [![scanpy-1.7.2](https://img.shields.io/badge/scanpy-1.7.2-blue)](https://github.com/theislab/scanpy) [![scikit__learn-0.24.2](https://img.shields.io/badge/scikit__learn-0.24.2-green)](https://github.com/scikit-learn/scikit-learn) [![transformers-4.6.1](https://img.shields.io/badge/transformers-4.6.1-yellow)](https://github.com/huggingface/transformers)
+1. Create environment with conda:
 
+```
+
+conda create -n scmapnet python=3.11.9
+conda activate scmapnet
+
+```
+
+2. Install dependencies
+
+```
+
+git clone https://github.com/Yuz7/scMapNet.git
+cd scMapNet
+pip install -r requirements.txt
+
+```
 
 # 🌱Fine-tuning with scMapNet weights
 
 To fine tune scMapNet on your own data, follow these steps:
 
-1. Download the scMapNet pre-trained weights:
+1. Download the scMapNet pre-trained weights:[here](https://drive.google.com/file/d/1ZlguObYTDVE-H9AqX48lfMSnvP0iTUg5/view?usp=drive_link)
 
 
 2. Generate treemap images with single-cell data (download baron dataset [here](https://drive.google.com/file/d/1YrG3xP_NeAlKKM7RzC38m2x9gtlffh6Y/view?usp=drive_link))
@@ -37,7 +53,7 @@ nohup ./generate_image_script.sh -e ../scdataset/sce_baron.rds -m treemap/marker
 
 ``` 
 
-1. Start fine-tuning (download pretrain weights [here](https://drive.google.com/file/d/1ZlguObYTDVE-H9AqX48lfMSnvP0iTUg5/view?usp=drive_link);use pancreas as example). A fine-tuned checkpoint will be saved during training. Evaluation will be run after training.
+1. Start fine-tuning (use pancreas as example). A fine-tuned checkpoint will be saved during training. Evaluation will be run after training.
 
 ```
 
