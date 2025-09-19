@@ -20,6 +20,7 @@ from timm.layers import DropPath, Mlp
 
 import timm.models.vision_transformer
 
+#attention定义，主要是qkv计算
 class Attention(nn.Module):
     fused_attn: Final[bool]
 
@@ -78,6 +79,8 @@ class LayerScale(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x.mul_(self.gamma) if self.inplace else x * self.gamma
 
+
+# block定义，其中包括了attention , mlp , norm，数据会经过这个block
 class Block(nn.Module):
     def __init__(
             self,
@@ -124,6 +127,7 @@ class Block(nn.Module):
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
         return x, weights
 
+# 这个ViT继承了timm中的ViT，有些调用是从父对象中调用的，需要看一下父对象的方法
 class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
     """ Vision Transformer with support for global average pooling
     """
@@ -173,6 +177,7 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         # print(f'attn test for outcome shape:{x.shape}')
         return x, attn_weights
 
+# 这个get_weight实现了 attention rollout，将attention分数整合提取出来，用于基因重要性提取和模型解释性的探究
 def get_weight(att_mat):
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     att_mat = torch.stack(att_mat).squeeze(1)

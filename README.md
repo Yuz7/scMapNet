@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 ```
 
-# 🌱Fine-tuning with scMapNet weights
+# 🌱scMapNet pipeline
 
 To fine tune scMapNet on your own data, follow these steps:
 
@@ -53,7 +53,7 @@ nohup ./generate_image_script.sh -e ../scdataset/sce_baron.rds -m treemap/marker
 
 ``` 
 
-1. Start fine-tuning (use pancreas as example). A fine-tuned checkpoint will be saved during training. Evaluation will be run after training.
+3. Start fine-tuning (use pancreas as example). A fine-tuned checkpoint will be saved during training. Evaluation will be run after training.
 
 ```
 
@@ -71,7 +71,7 @@ torchrun \
 
 ```
 
-1. For evaluation only 
+4. Evaluation/prediction
 
 ```
 
@@ -85,3 +85,17 @@ torchrun \
 
 ```
 
+5. novel cell type detection
+
+```
+
+torchrun \
+--standalone --nnodes 1 --nproc_per_node 2 main_finetune.py \
+--test \
+--detect_novel_value 0.95 \
+--resume ../finetune_pancreas/checkpoint-22.pth \
+--model vit_large_patch16 \
+--batch_size 64 --nb_classes 15 \
+--data_path ../data/ > log/mae_test.log 2>&1 &
+
+```

@@ -157,10 +157,17 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+    
+    # detect novel cell
+    parser.add_argument('--detect_novel_value', type = float, default = 0.0,
+                        help='The bound value (0-1) for detection of novel cell')
+    parser.add_argument('--time_test', action='store_true', default = False,
+                        help='perform inference time test')
     return parser
 
 
 def main(args):
+    #初始化分布式训练的一些参数
     misc.init_distributed_mode(args)
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -168,6 +175,7 @@ def main(args):
 
     device = torch.device(args.device)
 
+    # 固定种子数用于实验重复
     # fix the seed for reproducibility
     seed = args.seed + misc.get_rank()
     torch.manual_seed(seed)
@@ -175,6 +183,7 @@ def main(args):
 
     cudnn.benchmark = True
 
+    #原始图片数据需要经过一层转换，然后塞入dataset对象中
     if args.test:
         dataset_test = build_dataset('test', args=args)
     else:
@@ -182,9 +191,11 @@ def main(args):
         if args.eval:
             dataset_val = build_dataset('eval', args=args)
 
+    # 默认使用分布式训练方式
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
         global_rank = misc.get_rank()
+        # 深度学习需要预先定义一个抽样器，用于训练的时候进行数据迭代
         if args.test:
             sampler_test = torch.utils.data.SequentialSampler(dataset_test)
             if args.dist_eval:
@@ -217,6 +228,8 @@ def main(args):
     else:
         log_writer = None
 
+    # 训练需用一个数据加载器
+    # 需要的参数有你的dataset对象，抽样器，设定的batch size， worker数量
     if args.test:
         data_loader_test = torch.utils.data.DataLoader(
             dataset_test, sampler=sampler_test,
@@ -252,6 +265,7 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
     
+    # 模型选择，可选择不同的patch数和dim数量
     model = models_vit.__dict__[args.model](
         num_classes=args.nb_classes,
         drop_path_rate=args.drop_path,
@@ -269,6 +283,7 @@ def main(args):
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
 
+        # transformer模型有一个位置编码的概念
         # interpolate position embedding
         interpolate_pos_embed(model, checkpoint_model)
 
@@ -307,6 +322,7 @@ def main(args):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
 
+    # 用于调节学习率
     # build optimizer with layer-wise lr decay (lrd)
     param_groups = lrd.param_groups_lrd(model_without_ddp, args.weight_decay,
         no_weight_decay_list=model_without_ddp.no_weight_decay(),
@@ -315,6 +331,8 @@ def main(args):
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
     loss_scaler = NativeScaler()
 
+    # 我们这里使用交叉信息熵，即最后一个损失作为scMapNet的损失函数
+    # 原因在于我们的数据不需要很强的泛化能力，图像分布比较单一，不需要在训练微调阶段给予过多的惩罚，否则效果会降低不少
     if mixup_fn is not None:
         # smoothing is handled with mixup label transform
         criterion = SoftTargetCrossEntropy()
@@ -325,19 +343,22 @@ def main(args):
 
     print("criterion = %s" % str(criterion))
 
+    # 加载模型
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
+    # 如果走test的逻辑，下面逻辑就不走了
     if args.test:
-        start = time.time()
+        
         test_stats = evaluate(data_loader_test, model, device, args)
-        end = time.time()
+        
         print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['acc1']:.1f}%")
-        print(f"Speed of the network on the {len(dataset_test)} test images: {end - start} Seconds")
+        
         exit(0)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
+    # 根据给定的epoch数量进行训练
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -348,6 +369,7 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
+        # 训练一个epoch保存好模型
         if args.output_dir:
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,

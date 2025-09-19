@@ -22,17 +22,25 @@ from timm.data import Mixup
 import util.misc as misc
 import util.lr_sched as lr_sched
 
+import sys
+import time
 import scanpy as sc
 import anndata as ad
 
-def accuracy(output, target, topk=(1,)):
+import torch.nn.functional as F
+
+def accuracy(output, target, topk=(1,), unknown = 0, bound = 0.0):
     """Computes the accuracy over the k top predictions for the specified values of k"""
     maxk = min(max(topk), output.size()[1])
     batch_size = target.size(0)
-    _, pred = output.topk(maxk, 1, True, True)
+    output = F.softmax(output,1)
+    score, pred = output.topk(maxk, 1, True, True)
+    if bound > 0:
+        idxs = torch.where(score < bound)[0].to(pred.device)
+        pred[idxs] = torch.full((len(pred[idxs]),1), unknown).to(pred.device)
     pred = pred.t()
     correct = pred.eq(target.reshape(1, -1).expand_as(pred))
-    return target.expand(1,-1), pred, [correct[:min(k, maxk)].reshape(-1).float().sum(0) * 100. / batch_size for k in topk][0]
+    return target.expand(1,-1), pred, [correct[:min(k, maxk)].reshape(-1).float().sum(0) * 100. / batch_size for k in topk][0], score
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -123,44 +131,60 @@ def evaluate(data_loader, model, device, args):
     model.eval()
 
     adata_list = []
+    print(f'the len of data_loader: {len(data_loader)}')
+    start = time.time()
     for batch in metric_logger.log_every(data_loader, 10, header):
         images = batch[0]
         target = batch[-1]
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
-
-        # print(f'attn test for target shape:{target.shape}', flush=True)
+        batch_size = images.shape[0]
+        # print(f'attn test for target shape:{target.shape}')
+        # print(f'attn test for target:{target}', flush=True)
         # compute output
         with torch.cuda.amp.autocast():
             output, weights = model(images)
-            loss = criterion(output, target)
+            # loss = criterion(output, target)
 
         # print(f'attn test for output shape:{output.shape}', flush=True)
-        pred_true, pred, acc1 = accuracy(output, target)
+        # torch.save(output, "./test_tensor.pt")
+        # sys.exit(9990)
+        pred_true, pred, acc1, score = accuracy(output, target, unknown=args.nb_classes, bound=args.detect_novel_value)
+        # print(f'score: {score}')
         if args.test:
             result = torch.cat((pred.t(), pred_true.t()), 1).tolist()
             csv_writer.writerows(result)
+        else:
+            with torch.cuda.amp.autocast():
+                loss = criterion(output, target)
+            metric_logger.update(loss=loss.item())
         
-        batch_size = images.shape[0]
-        metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
-        if args.test:
+        if args.test and not args.time_test:
             att = torch.squeeze(weights).cpu().numpy()
             att = att.astype('float32')
             if len(att.shape) < 2:
                 att = att.reshape(1, len(att))
             new = sc.AnnData(att)
             adata_list.append(new)
-            
+    end = time.time()
+    print(f"Speed of the network on the {len(data_loader)} test images: {end - start} Seconds")
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print('* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f}'
-          .format(top1=metric_logger.acc1, losses=metric_logger.loss))
     if args.test:
+        csv_writer.writerows
+        print('* Acc@1 {top1.global_avg:.3f}'
+            .format(top1=metric_logger.acc1))
         csv_file.close()
+    else:
+        print('* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f}'
+            .format(top1=metric_logger.acc1, losses=metric_logger.loss))
         
-    if args.test and misc.is_main_process():
+        
+    if args.test and not args.time_test and misc.is_main_process():
         new = ad.concat(adata_list)
         new.write_h5ad(os.path.join(args.output_dir,'embed.h5ad'))
+        print('write attention data')
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
